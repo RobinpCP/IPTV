@@ -1,5 +1,5 @@
 #EXTM3U x-tvg-url="https://raw.githubusercontent.com/RobinpCP/IPTV/refs/heads/main/e.xml.gz"
-#EXTINF:-1  tvg-name="20261013 16:41" tvg-logo="https://raw.githubusercontent.com/RobinpCP/IPTV/refs/heads/main/logo/20261013 16:41.png"  group-title="更新时间",20261013 16:41
+#EXTINF:-1  tvg-name="20261014 07:42" tvg-logo="https://raw.githubusercontent.com/RobinpCP/IPTV/refs/heads/main/logo/20261014 07:42.png"  group-title="更新时间",20261014 07:42
 http://ottrrs.hl.chinamobile.com/PLTV/88888888/224/3221226537/index.m3u8
 #EXTINF:-1  tvg-name="CCTV1" tvg-logo="https://raw.githubusercontent.com/RobinpCP/IPTV/refs/heads/main/logo/CCTV1.png"  group-title="央视频道",CCTV1
 http://38.75.136.137:98/gslb/dsdqca/cctv1hd.m3u8?auth=test20251009
@@ -1749,6 +1749,8 @@ https://cdn6.cc.cd/163189/fct
 http://211.97.63.3:3443/hls/541/index.m3u8
 #EXTINF:-1  tvg-name="TVB翡翠台" tvg-logo="https://raw.githubusercontent.com/RobinpCP/IPTV/refs/heads/main/logo/TVB翡翠台.png"  group-title="港澳台",TVB翡翠台
 http://218.13.139.26:9901/tsfile/live/1079_1.m3u8?key=txiptv&playlive=1&authid=0
+#EXTINF:-1  tvg-name="TVB翡翠台" tvg-logo="https://raw.githubusercontent.com/RobinpCP/IPTV/refs/heads/main/logo/TVB翡翠台.png"  group-title="港澳台",TVB翡翠台
+http://cc.123.rr.kg/163189/fct
 #EXTINF:-1  tvg-name="TVB翡翠台" tvg-logo="https://raw.githubusercontent.com/RobinpCP/IPTV/refs/heads/main/logo/TVB翡翠台.png"  group-title="港澳台",TVB翡翠台
 http://gd.wsd.gd.cn:1698/hls/92/index.m3u8
 #EXTINF:-1  tvg-name="无线新闻" tvg-logo="https://raw.githubusercontent.com/RobinpCP/IPTV/refs/heads/main/logo/无线新闻.png"  group-title="港澳台",无线新闻
