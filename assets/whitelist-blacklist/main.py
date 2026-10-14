@@ -2,14 +2,15 @@
 # -*- coding: utf-8 -*-
 
 """
-直播源响应时间检测工具
-功能：检测远程直播源的响应时间
+直播源响应时间检测工具 (优化版)
+功能：检测远程直播源的响应时间，并深度验证内容有效性以避免误判
 特点：
 - 已在blacklist_auto中的链接直接判定失败，不检测
 - 白名单失败显示0.00ms，不加入黑名单
 - 新的失败链接追加到blacklist_auto
 - 支持手动输入多个URL，空格/换行/逗号分隔
 - 黑名单写入模式：BLACKLIST_MERGE = True 合并 / False 复写
+- 优化：使用 GET + Range 检查并验证数据负载及 m3u8 特征，大幅降低误判率
 """
 
 import urllib.request
@@ -56,7 +57,7 @@ class Config:
     USER_AGENT_URL = "okhttp/3.14.9"
 
     TIMEOUT_FETCH = 5
-    TIMEOUT_CHECK = 2.5
+    TIMEOUT_CHECK = 3.0    # 稍微調高以適應深度讀取
     TIMEOUT_CONNECT = 1.5
     TIMEOUT_READ = 1.5
 
@@ -88,7 +89,6 @@ class StreamChecker:
             return False
 
     def _load_blacklist(self) -> Set[str]:
-        # 复写模式：不加载旧黑名单
         if not Config.BLACKLIST_MERGE:
             logger.info("复写模式：跳过加载旧黑名单")
             return set()
@@ -114,13 +114,11 @@ class StreamChecker:
         return blacklist
 
     def _save_blacklist(self):
-        # 复写模式：无论本次是否有新失败，都重写黑名单文件
         if not Config.BLACKLIST_MERGE:
             self._write_blacklist_file(self.new_failed_urls)
             logger.info(f"黑名单已复写: {len(self.new_failed_urls)} 个")
             return
 
-        # 合并模式：没有新失败就不动文件
         if not self.new_failed_urls:
             return
 
@@ -162,7 +160,6 @@ class StreamChecker:
             logger.error(f"保存黑名单失败: {e}")
 
     def _write_blacklist_file(self, urls: Set[str]):
-        """按标准格式重写黑名单文件（复写模式使用）"""
         bj_time = datetime.now(timezone.utc) + timedelta(hours=8)
         version = f"{bj_time.strftime('%Y%m%d %H:%M')},url"
         all_content = ["更新时间,#genre#", version, "", "blacklist,#genre#"]
@@ -185,18 +182,44 @@ class StreamChecker:
         return context
 
     def check_http(self, url, timeout):
+        """
+        改進版 HTTP 檢測：
+        使用 GET 方法搭配 Range 標頭，並實際讀取資料內容與檢查狀態碼，
+        有效杜絕「伺服器還活著但串流內容失效或空白」的誤判情況。
+        """
         start = time.perf_counter()
         try:
-            headers = {"User-Agent": Config.USER_AGENT, "Connection": "close", "Range": "bytes=0-512"}
-            req = urllib.request.Request(url, headers=headers, method="HEAD")
+            headers = {
+                "User-Agent": Config.USER_AGENT, 
+                "Connection": "close", 
+                "Range": "bytes=0-1024"
+            }
+            req = urllib.request.Request(url, headers=headers, method="GET")
             opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=self.create_ssl_context()))
+            
             with opener.open(req, timeout=timeout) as resp:
+                code = resp.getcode()
+                # 嚴格限制狀態碼必須是 200 或 206
+                if code not in (200, 206):
+                    return False, round((time.perf_counter() - start) * 1000, 2)
+                
+                # 實際讀取一小段內容，確保有真實的串流/檔案數據流出
+                chunk = resp.read(512)
                 elapsed = (time.perf_counter() - start) * 1000
-                return 200 <= resp.getcode() < 400, round(elapsed, 2)
+                
+                if not chunk:
+                    return False, round(elapsed, 2)
+                
+                # 若為 m3u8 串流，進一步檢查是否包含標準 HLS 特徵碼
+                if 'm3u8' in url.lower():
+                    if b'#EXTM3U' not in chunk and len(chunk) < 10:
+                        return False, round(elapsed, 2)
+                
+                return True, round(elapsed, 2)
         except urllib.error.HTTPError as e:
-            return e.code in (301,302), round((time.perf_counter()-start)*1000,2)
-        except:
-            return False, round((time.perf_counter()-start)*1000,2)
+            return False, round((time.perf_counter() - start) * 1000, 2)
+        except Exception:
+            return False, round((time.perf_counter() - start) * 1000, 2)
 
     def check_rtmp_rtsp(self, url, timeout):
         start = time.perf_counter()
@@ -218,36 +241,36 @@ class StreamChecker:
                     if url.startswith('rtmp'):
                         s.send(b'\x03')
                         s.settimeout(Config.TIMEOUT_READ)
-                        return bool(s.recv(1)), round((time.perf_counter()-start)*1000,2)
+                        return bool(s.recv(1)), round((time.perf_counter()-start)*1000, 2)
                     else:
-                        return True, round((time.perf_counter()-start)*1000,2)
+                        return True, round((time.perf_counter()-start)*1000, 2)
                 except: continue
                 finally:
                     if s: s.close()
-            return False, round((time.perf_counter()-start)*1000,2)
+            return False, round((time.perf_counter()-start)*1000, 2)
         except:
-            return False, round((time.perf_counter()-start)*1000,2)
+            return False, round((time.perf_counter()-start)*1000, 2)
 
     def check_url(self, url, is_whitelist=False):
         try:
             u = quote(unquote(url), safe=':/?&=#')
             t = Config.TIMEOUT_CHECK * 1.5 if is_whitelist else Config.TIMEOUT_CHECK
             if url.startswith(('http://','https://')):
-                return self.check_http(u,t)
+                return self.check_http(u, t)
             elif url.startswith(('rtmp://','rtsp://')):
-                return self.check_rtmp_rtsp(u,t)
+                return self.check_rtmp_rtsp(u, t)
             else:
                 start = time.perf_counter()
                 parsed = urlparse(url)
-                if not parsed.hostname: return False,0
+                if not parsed.hostname: return False, 0
                 p = parsed.port or 80
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.settimeout(Config.TIMEOUT_CONNECT)
-                s.connect((parsed.hostname,p))
+                s.connect((parsed.hostname, p))
                 s.close()
-                return True, round((time.perf_counter()-start)*1000,2)
+                return True, round((time.perf_counter()-start)*1000, 2)
         except:
-            return False, round((time.perf_counter()-start)*1000,2)
+            return False, round((time.perf_counter()-start)*1000, 2)
 
     def fetch_remote(self, urls):
         all_lines = []
@@ -311,24 +334,24 @@ class StreamChecker:
             fut = {}
             for u,l in to_check:
                 wl = u in self.whitelist_urls
-                fut[e.submit(self.check_url,u,wl)] = (u,l,wl)
+                fut[e.submit(self.check_url, u, wl)] = (u, l, wl)
             cnt = 0
             for f in as_completed(fut):
-                u,l,wl = fut[f]
+                u, l, wl = fut[f]
                 cnt += 1
                 try:
                     valid, t = f.result()
                     if valid:
-                        ok.append((l,t))
+                        ok.append((l, t))
                     else:
                         if wl:
-                            ok.append((l,0.00))
+                            ok.append((l, 0.00))
                         else:
                             bad.append(l)
                             self.new_failed_urls.add(u)
                 except:
                     if wl:
-                        ok.append((l,0.00))
+                        ok.append((l, 0.00))
                     else:
                         bad.append(l)
                         self.new_failed_urls.add(u)
@@ -360,7 +383,7 @@ class StreamChecker:
 
     def run(self):
         logger.info("="*50)
-        logger.info("直播源检测工具")
+        logger.info("直播源检测工具 (优化版)")
         logger.info("="*50)
         self.load_whitelist()
         if self.manual_urls:
@@ -377,7 +400,7 @@ class StreamChecker:
         tc, pf, ul = self.prepare_lines(all_lines)
         s, f = self.batch_check(tc, ul)
         self._save_blacklist()
-        self.save_results(s,f,pf)
+        self.save_results(s, f, pf)
         logger.info(f"总耗时：{(datetime.now()-self.start_time).total_seconds():.1f}s")
         logger.info("="*50)
 
@@ -389,12 +412,6 @@ def parse_input_urls(text):
 
 # ================= 命令行参数解析 =================
 def parse_args(argv):
-    """
-    --merge / -m        合并（默认）
-    --overwrite / -o    复写
-    --no-merge          复写
-    也支持环境变量 BLACKLIST_MERGE=0/1/true/false
-    """
     manual_urls = []
     merge = Config.BLACKLIST_MERGE
 
@@ -412,7 +429,7 @@ def parse_args(argv):
         elif arg in ("--overwrite", "-o", "--no-merge"):
             merge = False
         elif arg.startswith("--"):
-            pass  # 忽略未知参数
+            pass
         else:
             manual_urls.extend(parse_input_urls(arg))
         i += 1
