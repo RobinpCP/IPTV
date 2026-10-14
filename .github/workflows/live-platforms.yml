@@ -1,10 +1,12 @@
 name: Live Platforms
 on:
-  permissions:
-    contents: write
   schedule:
     - cron: '15 16,22,4,10 * * *'
   workflow_dispatch:
+  
+permissions:
+  contents: write
+  
 jobs:
   merge-m3u:
     runs-on: ubuntu-22.04
