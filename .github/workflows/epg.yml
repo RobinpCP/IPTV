@@ -38,7 +38,7 @@ jobs:
             "http://epg.51zmt.top:8000/e1.xml.gz"
             "http://epg.51zmt.top:8000/e2.xml.gz"
             "https://epg.112114.xyz/pp.xml.gz"
-            "https://epg.v1.mk/fy.xml.gz"
+            "https://live.fanmingming.com/e.xml"
             "https://epg.pw/xmltv/epg_CN.xml.gz"
             "https://epg.pw/xmltv/epg_HK.xml.gz"
             "https://epg.pw/xmltv/epg_TW.xml.gz"
