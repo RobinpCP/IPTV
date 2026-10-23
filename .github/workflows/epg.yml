@@ -41,7 +41,7 @@ jobs:
             "https://epg.v1.mk/fy.xml.gz"
             "https://epg.pw/xmltv/epg_CN.xml.gz"
             "https://epg.pw/xmltv/epg_HK.xml.gz"
-            "https://epg.pw/xmltv/epg_TW.gz"
+            "https://epg.pw/xmltv/epg_TW.xml.gz"
           )
           # 清理
           rm -rf *.xml *.gz temp_* || true
