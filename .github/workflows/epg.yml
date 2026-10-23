@@ -42,44 +42,48 @@ jobs:
             "https://epg.pw/xmltv/epg_CN.xml.gz"
             "https://epg.pw/xmltv/epg_HK.xml.gz"
             "https://epg.pw/xmltv/epg_TW.gz"
-            # "https://gitee.com/gsls200808/xmltvepg/raw/master/e9.xml.gz"
-            # "https://epg.zsdc.eu.org/t.xml.gz"
-            # "https://raw.githubusercontent.com/kuke31/xmlgz/main/e.xml.gz"
-            # "https://raw.githubusercontent.com/kuke31/xmlgz/main/all.xml.gz"
-            # "https://raw.githubusercontent.com/suzukua/epg/refs/heads/hidden/t.xml.gz"
-            # "https://epg.pw/xmltv/epg_CN.xml"
-            # "https://epg.pw/xmltv/epg_HK.xml"
-            # "https://epg.pw/xmltv/epg_TW.xml"
           )
           # 清理
           rm -rf *.xml *.gz temp_* || true
 
-          # 下载
+          # 下载（带错误隔离，单个失败不影响后续）
           INDEX=0
           for URL in "${EPG_SOURCES[@]}"; do
             TMP_RAW="temp_${INDEX}.raw"
+            TMP_XML="temp_${INDEX}.xml"
             echo "🔽 下载源[$INDEX]: $URL"
-            wget -q -T 20 -t 2 -O "$TMP_RAW" "$URL" || true
-            if [ -s "$TMP_RAW" ]; then
-              if file -b "$TMP_RAW" | grep -q gzip; then
-                gunzip -c "$TMP_RAW" > "temp_${INDEX}.xml"
+            
+            # 使用 if 包裹，确保 wget 失败或文件为空时不会导致脚本整体退出
+            if wget -q -T 20 -t 2 -O "$TMP_RAW" "$URL" && [ -s "$TMP_RAW" ]; then
+              # 检查文件类型是否为 gzip
+              if file -b "$TMP_RAW" | grep -qE "gzip|compressed"; then
+                # 使用 || true 防止 gunzip 报错导致整个脚本中断
+                if gunzip -c "$TMP_RAW" > "$TMP_XML" 2>/dev/null; then
+                  echo "✅ 源[$INDEX] 下载并解压成功"
+                else
+                  echo "⚠️ 源[$INDEX] 解压失败（文件可能损坏）"
+                  rm -f "$TMP_XML"
+                fi
               else
-                mv "$TMP_RAW" "temp_${INDEX}.xml"
+                # 如果不是压缩包，直接当作普通文本(XML)重命名
+                mv "$TMP_RAW" "$TMP_XML"
+                echo "✅ 源[$INDEX] 下载成功（非压缩格式）"
               fi
             else
-              echo "⚠️ 源[$INDEX]下载为空/失败"
+              echo "⚠️ 源[$INDEX] 下载为空或连接失败"
             fi
+            
             rm -f "$TMP_RAW"
             INDEX=$((INDEX+1))
           done
 
-          # 检查有效文件
+          # 检查有效文件（如果所有源都失败，这里会捕获并退出）
           XML_COUNT=$(ls temp_*.xml 2>/dev/null | wc -l)
           if [ "${XML_COUNT}" -eq 0 ]; then
             echo "❌ 所有源下载失败，无可用xml"
             exit 1
           fi
-          echo "✅ 获取到 ${XML_COUNT} 个epg源文件"
+          echo "✅ 获取到 ${XML_COUNT} 个有效 epg 源文件"
 
           # 繁简转换
           for f in temp_*.xml; do
